@@ -1,6 +1,6 @@
 # courtparser.pl — Court Search Scraper
 
-A small Perl CLI script for parsing cases info and court documents from https://sudact.ru
+A small Perl CLI script for parsing cases info and fulltext court documents from https://судебныерешения.рф
 
 > **Status:** alpha.
 
