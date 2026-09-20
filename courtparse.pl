@@ -18,10 +18,12 @@ my $case_num = '';
 my $person = '';
 my $court_type=''; # 'ug','adm','gr'
 my $stage = '';
+my $numofcases = 0;
 my $noutput = "out";
 my $pfulltext = 0;
+my $termout = 0;
 @ARGV = map{decode('UTF-8',$_)} @ARGV;
-GetOptions('help|?'=>\$help, 'text=s'=> \$q,'type=s'=>\$court_type,'case_num=s'=>\$case_num,'stage=s'=>\$stage,'person=s'=>\$person,'output=s'=>\$noutput,'fulltext'=>\$pfulltext);
+GetOptions('help|?'=>\$help, 'text=s'=> \$q,'type=s'=>\$court_type,'case_num=s'=>\$case_num,'stage=s'=>\$stage,'person=s'=>\$person,'output=s'=>\$noutput,'fulltext'=>\$pfulltext, 'silent'=>\$termout,'n=i'=>\$numofcases);
 pod2usage(1) if $help;
 if(($court_type =~ /\A(?:ug|adm|gr)\z/ || $court_type eq '') && ($stage =~ /\A(?:first|appeal|cass|nadzor)\z/ || $stage eq ''))
 {
@@ -30,7 +32,6 @@ print "Query: ".$q." Person: ".$person." Case type: ".$court_type." Stage of pro
 else{
 die "Incorrect query";
 }
-
 my $ua = LWP::UserAgent->new(timeout=>30);
 my $url_post = 'https://xn--90afdbaav0bd1afy6eub5d.xn--p1ai/simple_filter';
 my $url_get = 'https://xn--90afdbaav0bd1afy6eub5d.xn--p1ai/search';
@@ -60,7 +61,17 @@ my $content_get = $after_post->decoded_content or die "Cannot parse content";
 
 my ($cases_total) = $content_get =~ /Показано документов:..b> (\d+)/g;
 print 'Cases found: '.$cases_total,"\n";
-my $total_pages = int($cases_total/20+0.5);
+if ($numofcases != 0 && $numofcases < $cases_total){
+$cases_total = $numofcases;
+print 'To be scraped: '.$cases_total,"\n";
+}
+else
+{
+$numofcases = $cases_total;
+print "OK","\n";
+}
+
+my $total_pages = int($cases_total/20+0.7);
 my ($outpt) = $content_get =~ /id="list">(.*)<\/table/s or die('Not found');
 print "Pages to be scraped: ".$total_pages,"\n";
 if ($total_pages > 1 ){
@@ -101,7 +112,30 @@ print STDERR  '-';
 
 }
 
-for my $p ($parser->find_by_tag_name('table')){
+sub get_grabfirstfrag{
+my $link = shift;
+my $court_text = $ua->request(GET('https://xn--90afdbaav0bd1afy6eub5d.xn--p1ai'.$link));
+my ($fulltext) = $court_text->decoded_content =~ m/blockquote itemprop="text">(.*)<\/blockquote/si;
+if(defined $fulltext){
+my $prser_2 = HTML::TreeBuilder->new;
+$prser_2->parse($fulltext);
+$prser_2->eof();
+my $outfrgm = $prser_2->as_text;
+return $1 if $outfrgm =~ /((?:\S+\s+){0,20}\Q$q\E(?:\s+\S+){0,20})/iu;
+$prser_2 = $prser_2->delete;
+}
+
+}
+
+
+my @tables = $parser->find_by_tag_name('table');
+if ($#tables < $numofcases)
+{
+$numofcases = $#tables;
+}
+
+
+for my $p (@tables[0 .. $numofcases]){
   my @case;
   my $link = $p->look_down('_tag','a')->attr('href');
   push @case,'судебныерешения.рф'.$link;
@@ -119,6 +153,11 @@ for my $p ($parser->find_by_tag_name('table')){
   if($pfulltext) {
     get_fulltext($link);
   }
+  my $frag = get_grabfirstfrag($link);
+  push @case, $frag;
+  if($termout != 1){ 
+   print $tt." | " .$case_number." | ".$frag."\n\n";
+  }
   push(@cases, [@case]);
 }
 $parser = $parser->delete;
@@ -130,7 +169,7 @@ my $csv = Text::CSV_XS->new(
   });
 
 open my $outf, '>:encoding(utf-8)',$noutput.'.csv' or die('Cannot write to file '.$!);
-$csv->print($outf,['Link','Case №','Court','Data','Sides']);
+$csv->print($outf,['Link','Case №','Court','Data','Sides','Fragment']);
 for my $row (@cases)
 {
   $csv->print($outf, $row);
@@ -139,14 +178,16 @@ close $outf;
 if ($pfulltext){ close $fulltxt;}
 
 print "\nOK\n";
+
+
 __END__
 =encoding UTF-8
 =head1 SYNOPSIS
 
-holden.pl --text TEXT --person TEXT --type {ug|gr|adm} --stage {first|appeal|cass|nadzor} --output FILE [options]
+courtparse.pl --text TEXT --person TEXT --type {ug|gr|adm} --stage {first|appeal|cass|nadzor} --output FILE [options]
 
-  holden.pl --text "компенсация морального вреда" --type gr --stage first --output kmv.csv
-  holden.pl --person "Роснефть" --type adm --stage appeal --output rosneft.csv
+  courtparse.pl --text "компенсация морального вреда" --type gr --stage first --output kmv.csv
+  courtparse.pl --person "Роснефть" --type adm --stage appeal --output rosneft.csv
 
 =item B<--text> I<STRING>
 
@@ -174,6 +215,14 @@ Output CSV file path (default: C<out.csv>).
 
 Also save the full text of each court document (this may be slow).
 Disabled by default.
+
+=item B<--n>
+
+Collect only n first cases
+
+=item B<--silent>
+
+Silent mode
 
 =item B<--help>
 

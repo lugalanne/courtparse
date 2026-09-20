@@ -41,15 +41,18 @@ chmod +x holden.pl
 - `--output` — output CSV path (default: `out.csv`).
 - `--fulltext` — also save fulltext court documents to .txt (Will be named same as --output).
 - `--help` — show usage.
+- `--silent` — silent mode.
+- `--n` — collect only n of cases.
+
 
 ## Examples
 Search civil cases containing phrase “компенсация морального вреда”:
 ```bash
-./holden.pl --text "компенсация морального вреда" --type gr --stage first --output kmv.csv
+./courtparse.pl --text "компенсация морального вреда" --type gr --stage first --output kmv.csv
 ```
 
 ```bash
-./holden.pl --text "Алексей Навальный" --type ug --fulltext  --output kmv.csv
+./courtparse.pl --text "Алексей Навальный" --type ug --fulltext  --output kmv.csv --silent
 ```
 
 
